@@ -1,12 +1,12 @@
 // ==UserScript==
 // @name            Github & Gist Link, Download & Copy
-// @description:zh-CN 兼容新版 UI：GitHub 提供 Raw/下载；Gist 提供复制最新链接及本地内容抓取，避开跨域拦截。
-// @version           1.7
+// @description:zh-CN 兼容新版 UI：GitHub 提供 Raw/下载；Gist 提供复制最新链接、下载及内容抓取。支持跨域下载。
+// @version           1.9
 // @author            iulee
 // @match             https://github.com/*
 // @match             https://gist.github.com/*
 // @icon              https://github.githubassets.com/favicons/favicon.svg
-// @grant             none
+// @grant             GM_xmlhttpRequest
 // ==/UserScript==
 
 (function() {
@@ -79,6 +79,38 @@
         return div;
     }
 
+    // 使用 GM_xmlhttpRequest 解决跨域并强制下载
+    const downloadFile = (url) => {
+        const fileName = decodeURIComponent(url.split('/').pop().split('?')[0]);
+        
+        if (typeof GM_xmlhttpRequest !== 'undefined') {
+            GM_xmlhttpRequest({
+                method: 'GET',
+                url: url,
+                responseType: 'blob',
+                onload: function(response) {
+                    const blob = response.response;
+                    const a = document.createElement('a');
+                    a.href = window.URL.createObjectURL(blob);
+                    a.download = fileName;
+                    a.click();
+                    window.URL.revokeObjectURL(a.href);
+                },
+                onerror: function() {
+                    window.open(url, '_blank');
+                }
+            });
+        } else {
+            // 备选 fetch 方案
+            fetch(url).then(r => r.blob()).then(blob => {
+                const a = document.createElement('a');
+                a.href = window.URL.createObjectURL(blob);
+                a.download = fileName;
+                a.click();
+            }).catch(() => window.open(url, '_blank'));
+        }
+    };
+
     // --- GitHub 仓库逻辑 ---
 
     const scanGitHub = () => {
@@ -101,13 +133,7 @@
             
             const downBtn = createIconBtn('Download File', `<svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="currentColor"><path d="M1.75 14.25A1.75 1.75 0 013.5 12.5h9a1.75 1.75 0 011.75 1.75v1.5a.75.75 0 01-.75.75H2.5a.75.75 0 01-.75-.75v-1.5zM10.75 9.25a.25.25 0 01.25.25v2.5a.25.25 0 01-.25.25H5.25a.25.25 0 01-.25-.25v-2.5a.25.25 0 01.25-.25h5.5zM8 1.75a.25.25 0 01.25.25v7.5a.25.25 0 01-.25.25H6.75a.25.25 0 01-.25-.25v-7.5a.25.25 0 01.25-.25h1.5zM10.25 5.25l1.5 1.5a.25.25 0 01.35 0l3-3a.25.25 0 00-.35-.35L11 5.25 9.25 3.5a.25.25 0 00-.35.35z"></path></svg>`, (e) => {
                 e.preventDefault();
-                const fileName = decodeURIComponent(rawUrl.split('/').pop().split('?')[0]);
-                fetch(rawUrl).then(r => r.blob()).then(blob => {
-                    const a = document.createElement('a');
-                    a.href = window.URL.createObjectURL(blob);
-                    a.download = fileName;
-                    a.click();
-                }).catch(() => window.open(rawUrl, '_blank'));
+                downloadFile(rawUrl);
             });
 
             btnGroup.appendChild(copyBtn);
@@ -120,7 +146,6 @@
     // --- Gist 逻辑 ---
 
     const scanGist = () => {
-        // 查找所有文件块
         const containers = document.querySelectorAll('.gist-file-container, .file');
         containers.forEach(container => {
             if (container.hasAttribute('data-gist-enhanced-ready')) return;
@@ -129,7 +154,6 @@
             const actions = container.querySelector('.file-actions');
             if (!header || !actions) return;
 
-            // 获取 Raw 链接
             const rawLinkAnchor = header.querySelector('a[href*="/raw/"]');
             if (!rawLinkAnchor) return;
 
@@ -140,31 +164,29 @@
             btnGroup.className = 'gist-enhanced-group';
             btnGroup.style.cssText = 'display:inline-flex; align-items:center; gap:12px; margin-right:12px; vertical-align:middle;';
             
-            // 按钮 1: 复制最新链接
             const copyLinkBtn = createIconBtn('Copy Latest Raw URL', `<svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="currentColor"><path d="M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z"></path></svg>`, (e) => {
                 e.preventDefault();
                 copyToClipboard(latestRawUrl, copyLinkBtn);
             });
+
+            const downBtn = createIconBtn('Download Latest File', `<svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="currentColor"><path d="M1.75 14.25A1.75 1.75 0 013.5 12.5h9a1.75 1.75 0 011.75 1.75v1.5a.75.75 0 01-.75.75H2.5a.75.75 0 01-.75-.75v-1.5zM10.75 9.25a.25.25 0 01.25.25v2.5a.25.25 0 01-.25.25H5.25a.25.25 0 01-.25-.25v-2.5a.25.25 0 01.25-.25h5.5zM8 1.75a.25.25 0 01.25.25v7.5a.25.25 0 01-.25.25H6.75a.25.25 0 01-.25-.25v-7.5a.25.25 0 01.25-.25h1.5zM10.25 5.25l1.5 1.5a.25.25 0 01.35 0l3-3a.25.25 0 00-.35-.35L11 5.25 9.25 3.5a.25.25 0 00-.35.35z"></path></svg>`, (e) => {
+                e.preventDefault();
+                downloadFile(latestRawUrl);
+            });
             
-            // 按钮 2: 复制内容 (尝试本地抓取 + fetch 备用)
             const copyContentBtn = createIconBtn('Copy Latest File Content', `<svg aria-hidden="true" height="16" viewBox="0 0 16 16" width="16" fill="currentColor"><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z"></path><path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z"></path></svg>`, async (e) => {
                 e.preventDefault();
-                
-                // 方法 A: 尝试从当前页面容器直接抓取文本内容 (避开跨域且最快)
                 const textArea = container.querySelector('.blob-wrapper table, .blob-wrapper pre');
                 if (textArea) {
                     copyToClipboard(textArea.innerText, copyContentBtn);
                     return;
                 }
-
-                // 方法 B: 如果页面没渲染(例如太大), 则尝试 Fetch
                 try {
                     const response = await fetch(latestRawUrl);
                     if (response.ok) {
                         const text = await response.text();
                         copyToClipboard(text, copyContentBtn);
                     } else {
-                        // 如果 Fetch 失败 (由于跨域), 打开新窗口作为最后的兜底
                         window.open(latestRawUrl, '_blank');
                     }
                 } catch (err) {
@@ -173,6 +195,7 @@
             });
 
             btnGroup.appendChild(copyLinkBtn);
+            btnGroup.appendChild(downBtn);
             btnGroup.appendChild(copyContentBtn);
             actions.insertBefore(btnGroup, actions.firstChild);
             container.setAttribute('data-gist-enhanced-ready', 'true');

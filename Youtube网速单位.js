@@ -17,7 +17,7 @@
 
     // --- 配置项 ---
     const CONVERTED_VALUE_ID = 'yt-speed-converter-mbps-display';
-    const CONVERTED_VALUE_COLOR = '#ff0000'; // 红色
+    const CONVERTED_VALUE_COLOR = '#B39DDB'; // 紫色
 
     /**
      * 将 Kbps 字符串转换为 Mbps 字符串
@@ -142,5 +142,6 @@
     } else {
         setupMainObserver();
     }
+
 
 })();
